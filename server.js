@@ -1,496 +1,378 @@
 require('dotenv').config();
-'use strict';
-
 const express = require('express');
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const cors = require('cors');
-const helmet = require('helmet');
 const multer = require('multer');
-const rateLimit = require('express-rate-limit');
-const crypto = require('crypto');
-const { put } = require('@vercel/blob');
 const path = require('path');
+const fs = require('fs');
+const bcryptjs = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
+const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'okasha_secret_key_2026';
+const MONGO_URI = process.env.MONGO_URI;
 
-// ============ المتغيرات ============
-const PORT = Number(process.env.PORT || 5000);
-const NODE_ENV = process.env.NODE_ENV || 'development';
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://admin:password@cluster.mongodb.net/okasha?retryWrites=true&w=majority';
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5000';
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123456';
+// ===================== Middleware ======================
+app.use(cors({ origin: '*', credentials: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ============ الأمان ============
-app.disable('x-powered-by');
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+// Use /tmp for Vercel (read-only filesystem except /tmp)
+const isVercel = process.env.VERCEL === '1';
+const uploadsDir = isVercel ? '/tmp/uploads' : path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
 
-const allowedOrigins = FRONTEND_URL.split(',').map(url => url.trim()).filter(Boolean);
-const corsOptions = {
-  origin(origin, callback) {
-    if (!origin || NODE_ENV !== 'production' || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS: Origin غير مسموح به'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false
-};
+// Serve frontend - use process.cwd() for Vercel compatibility
+const staticDir = process.cwd();
+app.use(express.static(staticDir));
 
-app.use(cors(corsOptions));
-app.use(express.json({ limit: '5mb' }));
-
-// ============ تقديم الملفات الثابتة ============
-app.use(express.static(path.join(__dirname), {
-  maxAge: '1h',
-  etag: false
-}));
-
-// ============ Rate Limiting ============
-const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false });
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
-app.use('/api', apiLimiter);
-app.use('/api/login', authLimiter);
-app.use('/api/register', authLimiter);
-
-// ============ قاعدة البيانات ============
-let cached = global.__okashaMongo || { conn: null, promise: null };
-if (!global.__okashaMongo) global.__okashaMongo = cached;
-
-async function connectDB() {
-  if (cached.conn) return cached.conn;
-  if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 10000 })
-      .then(m => { console.log('✅ MongoDB متصل'); return m; })
-      .catch(e => { cached.promise = null; throw e; });
-  }
-  cached.conn = await cached.promise;
-  return cached.conn;
-}
-
-// ============ الـ Schemas ============
-const userSchema = new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  phone: { type: String, required: true },
-  parentPhone: { type: String },
-  stage: { type: String },
-  grade: { type: String },
-  username: { type: String, required: true, unique: true, trim: true, lowercase: true, minlength: 3 },
-  password: { type: String, required: true, select: false },
-  role: { type: String, enum: ['admin', 'student'], default: 'student' },
-  status: { type: String, enum: ['pending', 'approved'], default: 'pending' }
-}, { timestamps: true });
-
-const lessonSchema = new mongoose.Schema({
-  title: { type: String, required: true, trim: true },
-  stage: { type: String },
-  grade: { type: String },
-  content: { type: String },
-  videoUrl: { type: String },
-  pdfUrl: { type: String },
-  driveUrl: { type: String },
-  views: { type: Number, default: 0 }
-}, { timestamps: true });
-
-const questionSchema = new mongoose.Schema({
-  questionText: { type: String, required: true },
-  options: { type: [String], required: true, validate: { validator: (arr) => arr.length === 4 } },
-  correctAnswerIndex: { type: Number, required: true, min: 0, max: 3 },
-  explanation: { type: String }
+// Root route
+app.get('/', (req, res) => {
+  res.sendFile(path.join(staticDir, 'index.html'));
 });
 
-const examSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  stage: { type: String },
-  grade: { type: String },
-  questions: { type: [questionSchema], required: true, validate: { validator: (arr) => arr.length >= 1 } },
-  duration: { type: Number, default: 60 },
-  passingScore: { type: Number, default: 60 }
-}, { timestamps: true });
-
-const resultSchema = new mongoose.Schema({
-  student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  studentName: { type: String, required: true },
-  exam: { type: mongoose.Schema.Types.ObjectId, ref: 'Exam', required: true },
-  examTitle: { type: String, required: true },
-  score: { type: Number, required: true },
-  total: { type: Number, required: true },
-  percentage: { type: Number, required: true },
-  isPassed: { type: Boolean }
-}, { timestamps: true });
-
-const User = mongoose.models.User || mongoose.model('User', userSchema);
-const Lesson = mongoose.models.Lesson || mongoose.model('Lesson', lessonSchema);
-const Exam = mongoose.models.Exam || mongoose.model('Exam', examSchema);
-const Result = mongoose.models.Result || mongoose.model('Result', resultSchema);
-
-// ============ Middleware ============
-const storage = multer.memoryStorage();
-const upload = multer({ 
-  storage, 
-  fileFilter: (req, file, cb) => file.mimetype === 'application/pdf' ? cb(null, true) : cb(new Error('PDF only')),
+// Multer setup
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, unique + path.extname(file.originalname));
+  }
+});
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('يجب رفع ملف PDF فقط'), false);
+  },
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-const auth = (req, res, next) => {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) return res.status(401).json({ message: 'Token مفقود' });
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (e) {
-    res.status(401).json({ message: 'Token غير صحيح' });
-  }
-};
+// ===================== Schemas ======================
+const UserSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true, minlength: 3 },
+  phone: { type: String, required: true },
+  parentPhone: String,
+  stage: { type: String, enum: ['المرحلة الابتدائية', 'المرحلة الإعدادية', 'المرحلة الثانوية'], required: true },
+  grade: { type: String, required: true },
+  username: { type: String, required: true, unique: true, trim: true, minlength: 4, lowercase: true },
+  password: { type: String, required: true, minlength: 6 },
+  role: { type: String, enum: ['student', 'admin'], default: 'student' },
+  status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+  isActive: { type: Boolean, default: true },
+  lastLogin: Date
+}, { timestamps: true });
 
-const adminOnly = (req, res, next) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ message: 'المسؤول فقط' });
+UserSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  this.password = await bcryptjs.hash(this.password, 10);
   next();
+});
+
+UserSchema.methods.matchPassword = async function(entered) {
+  return await bcryptjs.compare(entered, this.password);
 };
 
-const cleanString = (value, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : '';
-const validObjectId = (id) => mongoose.isValidObjectId(id);
-const publicUser = (user) => ({ _id: user._id, name: user.name, phone: user.phone, stage: user.stage, grade: user.grade, username: user.username, role: user.role, status: user.status });
+const LessonSchema = new mongoose.Schema({
+  title: { type: String, required: true, trim: true },
+  stage: { type: String, enum: ['المرحلة الابتدائية', 'المرحلة الإعدادية', 'المرحلة الثانوية'], required: true },
+  grade: { type: String, required: true },
+  content: { type: String, required: true },
+  videoUrl: String,
+  pdfUrl: String,
+  driveUrl: String,
+  isPublished: { type: Boolean, default: true }
+}, { timestamps: true });
 
-// ============ Routes - تقديم index.html ============
-
-// المسار الجذري - تقديم الواجهة الأمامية
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+const QuestionSchema = new mongoose.Schema({
+  questionText: String,
+  options: [String],
+  correctAnswerIndex: Number,
+  points: { type: Number, default: 1 }
 });
 
-// الصحة
-app.get('/api/health', async (req, res) => {
+const ExamSchema = new mongoose.Schema({
+  title: { type: String, required: true, trim: true },
+  stage: { type: String, enum: ['المرحلة الابتدائية', 'المرحلة الإعدادية', 'المرحلة الثانوية'], required: true },
+  grade: { type: String, required: true },
+  questions: [QuestionSchema],
+  totalPoints: { type: Number, default: 0 },
+  duration: { type: Number, default: 60 },
+  isPublished: { type: Boolean, default: true }
+}, { timestamps: true });
+
+ExamSchema.pre('save', function(next) {
+  this.totalPoints = this.questions.reduce((sum, q) => sum + (q.points || 1), 0);
+  next();
+});
+
+const ResultSchema = new mongoose.Schema({
+  student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  studentName: String,
+  studentUsername: String,
+  exam: { type: mongoose.Schema.Types.ObjectId, ref: 'Exam', required: true },
+  examTitle: String,
+  score: { type: Number, required: true },
+  total: { type: Number, required: true },
+  percentage: { type: Number, default: 0 },
+  grade: String,
+  status: { type: String, enum: ['passed', 'failed'] },
+  answers: Array
+}, { timestamps: true });
+
+ResultSchema.pre('save', function(next) {
+  this.percentage = (this.score / this.total) * 100;
+  if (this.percentage >= 90) this.grade = 'A';
+  else if (this.percentage >= 80) this.grade = 'B';
+  else if (this.percentage >= 70) this.grade = 'C';
+  else if (this.percentage >= 60) this.grade = 'D';
+  else this.grade = 'F';
+  this.status = this.percentage >= 50 ? 'passed' : 'failed';
+  next();
+});
+
+const User = mongoose.model('User', UserSchema);
+const Lesson = mongoose.model('Lesson', LessonSchema);
+const Exam = mongoose.model('Exam', ExamSchema);
+const Result = mongoose.model('Result', ResultSchema);
+
+// ===================== Auth Middleware ======================
+const protect = async (req, res, next) => {
   try {
-    await connectDB();
-    res.json({ ok: true, message: 'الخادم يعمل' });
-  } catch {
-    res.status(500).json({ ok: false });
+    let token;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+    if (!token) return res.status(401).json({ success: false, message: 'لم يتم توفير توكن' });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = await User.findById(decoded.id);
+    if (!req.user || !req.user.isActive) return res.status(401).json({ success: false, message: 'الحساب غير موجود أو معطل' });
+    next();
+  } catch (error) {
+    res.status(401).json({ success: false, message: 'توكن غير صالح' });
   }
-});
+};
 
-// التسجيل
+const isAdmin = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') return next();
+  res.status(403).json({ success: false, message: 'ليس لديك صلاحية' });
+};
+
+// ===================== Init Admin ======================
+const initAdmin = async () => {
+  try {
+    await User.deleteMany({ username: 'admin', role: 'admin' });
+    const admin = new User({
+      name: 'أ/أحمد عكاشة',
+      username: 'admin',
+      password: 'adminpassword123',
+      phone: '01110370462',
+      stage: 'المرحلة الثانوية',
+      grade: 'الصف الثالث الثانوي',
+      role: 'admin',
+      status: 'approved'
+    });
+    await admin.save();
+    console.log('✅ تم إنشاء/تحديث حساب المعلم الافتراضي');
+    console.log('👤 admin / 🔑 adminpassword123');
+  } catch (err) {
+    console.error('❌ خطأ في إنشاء الأدمن:', err.message);
+  }
+};
+
+// ===================== Routes ======================
+
+// Auth
 app.post('/api/register', async (req, res) => {
   try {
-    await connectDB();
     const { name, phone, parentPhone, stage, grade, username, password } = req.body;
-    const cleanUsername = cleanString(username, 40).toLowerCase();
-
-    if (!name || !phone || !stage || !grade || !cleanUsername || !password) {
-      return res.status(400).json({ message: 'البيانات غير مكتملة' });
-    }
-    if (password.length < 8) return res.status(400).json({ message: 'كلمة مرور قصيرة' });
-
-    const existing = await User.findOne({ username: cleanUsername });
-    if (existing) return res.status(409).json({ message: 'اسم المستخدم موجود' });
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-    await User.create({
-      name: cleanString(name, 100),
-      phone,
-      parentPhone: cleanString(parentPhone),
-      stage,
-      grade,
-      username: cleanUsername,
-      password: hashedPassword,
-      role: 'student',
-      status: 'pending'
-    });
-
-    res.status(201).json({ message: 'تم الطلب، بانتظار الموافقة' });
+    const existing = await User.findOne({ username: username.toLowerCase().trim() });
+    if (existing) return res.status(409).json({ success: false, message: 'اسم المستخدم مسجل مسبقاً!' });
+    const user = new User({ name, phone, parentPhone, stage, grade, username, password, role: 'student', status: 'pending' });
+    await user.save();
+    res.status(201).json({ success: true, message: 'تم إرسال طلب الانضمام بنجاح! بانتظار موافقة المعلم.' });
   } catch (error) {
-    console.error('Register:', error);
-    res.status(500).json({ message: 'خطأ التسجيل' });
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 
-// الدخول
 app.post('/api/login', async (req, res) => {
   try {
-    await connectDB();
-    const username = cleanString(req.body.username, 40).toLowerCase();
-    const password = req.body.password;
-
-    const user = await User.findOne({ username }).select('+password');
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ message: 'بيانات خاطئة' });
+    const { username, password } = req.body;
+    const cleanUser = (username || '').toString().trim().toLowerCase();
+    const cleanPass = (password || '').toString().trim();
+    console.log(`🔍 محاولة دخول: "${cleanUser}"`);
+    const user = await User.findOne({ $or: [{ username: cleanUser }, { phone: cleanUser }] });
+    if (!user) {
+      console.log(`❌ المستخدم غير موجود`);
+      return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+    }
+    const isMatch = await user.matchPassword(cleanPass);
+    if (!isMatch) {
+      console.log(`❌ كلمة المرور خاطئة`);
+      return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
     }
     if (user.role === 'student' && user.status !== 'approved') {
-      return res.status(403).json({ message: 'حسابك قيد الانتظار' });
+      return res.status(403).json({ success: false, message: 'حسابك قيد التفعيل والقبول من المعلم' });
     }
-
-    const token = jwt.sign(
-      { id: String(user._id), role: user.role, name: user.name, grade: user.grade },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({ token, user: publicUser(user) });
+    user.lastLogin = new Date();
+    await user.save();
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+    console.log(`🎉 دخول ناجح: ${user.name}`);
+    res.json({
+      success: true, message: 'تم تسجيل الدخول بنجاح', token,
+      user: { _id: user._id, name: user.name, username: user.username, role: user.role, status: user.status, grade: user.grade, stage: user.stage }
+    });
   } catch (error) {
-    console.error('Login:', error);
-    res.status(500).json({ message: 'خطأ الدخول' });
+    console.error('❌ خطأ في الدخول:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// بيانات الطالب
-app.get('/api/me', auth, async (req, res) => {
+// Lessons
+app.get('/api/lessons', async (req, res) => {
   try {
-    await connectDB();
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'غير موجود' });
-    res.json({ user: publicUser(user) });
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
+    const filter = req.query.grade ? { grade: req.query.grade, isPublished: true } : { isPublished: true };
+    const lessons = await Lesson.find(filter).sort({ createdAt: -1 });
+    res.json({ success: true, count: lessons.length, data: lessons });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 });
 
-// ============ الدروس ============
-
-app.get('/api/lessons', auth, async (req, res) => {
+app.post('/api/lessons', protect, isAdmin, upload.single('pdfFile'), async (req, res) => {
   try {
-    await connectDB();
-    const filter = req.user.role === 'student' ? { grade: req.user.grade } : {};
-    const lessons = await Lesson.find(filter).sort({ createdAt: -1 }).lean();
-    res.json(lessons);
-  } catch {
-    res.status(500).json({ message: 'خطأ الدروس' });
-  }
-});
-
-app.post('/api/admin/lessons', auth, adminOnly, upload.single('pdfFile'), async (req, res) => {
-  try {
-    await connectDB();
     const { title, stage, grade, content, videoUrl, driveUrl } = req.body;
-
-    if (!title) return res.status(400).json({ message: 'العنوان مطلوب' });
-
-    const lesson = await Lesson.create({
-      title,
-      stage,
-      grade,
-      content,
-      videoUrl,
-      driveUrl,
-      pdfUrl: req.file ? await uploadPdf(req.file) : ''
+    const host = req.get('host');
+    const protocol = req.get('x-forwarded-proto') || req.protocol;
+    const lesson = new Lesson({
+      title, stage, grade, content, videoUrl, driveUrl,
+      pdfUrl: req.file ? `${protocol}://${host}/uploads/${req.file.filename}` : null,
+      createdBy: req.user._id
     });
-
-    res.status(201).json({ message: 'تم النشر', data: lesson });
-  } catch (error) {
-    console.error('Lesson:', error);
-    res.status(500).json({ message: 'خطأ النشر' });
-  }
+    await lesson.save();
+    res.status(201).json({ success: true, message: 'تم نشر الدرس بنجاح!' });
+  } catch (error) { res.status(400).json({ success: false, message: error.message }); }
 });
 
-app.delete('/api/admin/lessons/:id', auth, adminOnly, async (req, res) => {
-  try {
-    await connectDB();
-    if (!validObjectId(req.params.id)) return res.status(400).json({ message: 'معرف خاطئ' });
-    await Lesson.findByIdAndDelete(req.params.id);
-    res.json({ message: 'تم الحذف' });
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
+app.delete('/api/lessons/:id', protect, isAdmin, async (req, res) => {
+  try { await Lesson.findByIdAndDelete(req.params.id); res.json({ success: true, message: 'تم حذف الدرس!' }); }
+  catch (error) { res.status(500).json({ success: false, message: error.message }); }
 });
 
-// ============ الامتحانات ============
-
-app.get('/api/exams', auth, async (req, res) => {
+// Exams
+app.get('/api/exams', async (req, res) => {
   try {
-    await connectDB();
-    const filter = req.user.role === 'student' ? { grade: req.user.grade } : {};
-    const exams = await Exam.find(filter).sort({ createdAt: -1 }).select('-questions.correctAnswerIndex').lean();
-    res.json(exams);
-  } catch {
-    res.status(500).json({ message: 'خطأ الامتحانات' });
-  }
+    const filter = req.query.grade ? { grade: req.query.grade, isPublished: true } : { isPublished: true };
+    const exams = await Exam.find(filter).sort({ createdAt: -1 }).select('-questions.correctAnswerIndex');
+    res.json({ success: true, count: exams.length, data: exams });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 });
 
-app.get('/api/exams/:id', auth, async (req, res) => {
+app.get('/api/exams/:id', async (req, res) => {
   try {
-    await connectDB();
-    if (!validObjectId(req.params.id)) return res.status(400).json({ message: 'معرف خاطئ' });
-    const exam = await Exam.findById(req.params.id).select('-questions.correctAnswerIndex').lean();
-    if (!exam) return res.status(404).json({ message: 'غير موجود' });
-    res.json(exam);
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
+    const exam = await Exam.findById(req.params.id).select('-questions.correctAnswerIndex');
+    if (!exam) return res.status(404).json({ success: false, message: 'الامتحان غير موجود' });
+    res.json({ success: true, data: exam });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 });
 
-app.post('/api/exams/:id/submit', auth, async (req, res) => {
+app.post('/api/exams', protect, isAdmin, async (req, res) => {
   try {
-    await connectDB();
-    if (!validObjectId(req.params.id)) return res.status(400).json({ message: 'معرف خاطئ' });
-
-    const exam = await Exam.findById(req.params.id);
-    if (!exam) return res.status(404).json({ message: 'غير موجود' });
-
-    let score = 0;
-    const answers = req.body.answers || [];
-    exam.questions.forEach((q, i) => {
-      if (answers[i] === q.correctAnswerIndex) score++;
-    });
-
-    const percentage = Math.round((score / exam.questions.length) * 100);
-    const isPassed = percentage >= exam.passingScore;
-
-    await Result.create({
-      student: req.user.id,
-      studentName: req.user.name,
-      exam: exam._id,
-      examTitle: exam.title,
-      score,
-      total: exam.questions.length,
-      percentage,
-      isPassed
-    });
-
-    res.status(201).json({ score, totalScore: exam.questions.length, percentage, isPassed, message: isPassed ? 'مبروك!' : 'حاول مجدداً' });
-  } catch (error) {
-    console.error('Submit:', error);
-    res.status(500).json({ message: 'خطأ التسليم' });
-  }
-});
-
-app.post('/api/admin/exams', auth, adminOnly, async (req, res) => {
-  try {
-    await connectDB();
     const { title, stage, grade, questions } = req.body;
-
-    if (!title || !questions?.length) return res.status(400).json({ message: 'بيانات ناقصة' });
-
-    await Exam.create({ title, stage, grade, questions });
-    res.status(201).json({ message: 'تم الإنشاء' });
-  } catch {
-    res.status(400).json({ message: 'خطأ في البيانات' });
-  }
+    const exam = new Exam({ title, stage, grade, questions, createdBy: req.user._id, isPublished: true });
+    await exam.save();
+    res.status(201).json({ success: true, message: 'تم نشر الامتحان بنجاح!' });
+  } catch (error) { res.status(400).json({ success: false, message: error.message }); }
 });
 
-app.delete('/api/admin/exams/:id', auth, adminOnly, async (req, res) => {
+app.delete('/api/exams/:id', protect, isAdmin, async (req, res) => {
   try {
-    await connectDB();
-    if (!validObjectId(req.params.id)) return res.status(400).json({ message: 'معرف خاطئ' });
     await Exam.findByIdAndDelete(req.params.id);
-    res.json({ message: 'تم الحذف' });
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
+    await Result.deleteMany({ exam: req.params.id });
+    res.json({ success: true, message: 'تم حذف الامتحان!' });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 });
 
-// ============ إدارة الطلاب ============
-
-app.get('/api/admin/pending-students', auth, adminOnly, async (req, res) => {
+app.post('/api/exams/:id/submit', protect, async (req, res) => {
   try {
-    await connectDB();
-    const students = await User.find({ status: 'pending', role: 'student' }).select('-password').sort({ createdAt: -1 });
-    res.json(students.map(publicUser));
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
+    const { answers } = req.body;
+    const exam = await Exam.findById(req.params.id);
+    if (!exam) return res.status(404).json({ success: false, message: 'الامتحان غير موجود' });
+    let score = 0;
+    const answersDetail = [];
+    exam.questions.forEach((q, idx) => {
+      const isCorrect = answers[idx] === q.correctAnswerIndex;
+      score += isCorrect ? (q.points || 1) : 0;
+      answersDetail.push({ questionIndex: idx, selectedAnswer: answers[idx], isCorrect, earnedPoints: isCorrect ? (q.points || 1) : 0 });
+    });
+    const result = new Result({
+      student: req.user._id, studentName: req.user.name, studentUsername: req.user.username,
+      exam: req.params.id, examTitle: exam.title, score, total: exam.totalPoints, answers: answersDetail
+    });
+    await result.save();
+    res.status(201).json({
+      success: true, message: 'تم التسليم!',
+      score, total: exam.totalPoints, percentage: result.percentage, grade: result.grade, status: result.status
+    });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 });
 
-app.get('/api/admin/approved-students', auth, adminOnly, async (req, res) => {
+// Admin
+app.get('/api/admin/pending-students', protect, isAdmin, async (req, res) => {
+  try { const students = await User.find({ role: 'student', status: 'pending' }).select('-password'); res.json({ success: true, count: students.length, data: students }); }
+  catch (error) { res.status(500).json({ success: false, message: error.message }); }
+});
+
+app.get('/api/admin/approved-students', protect, isAdmin, async (req, res) => {
+  try { const students = await User.find({ role: 'student', status: 'approved' }).select('-password'); res.json({ success: true, count: students.length, data: students }); }
+  catch (error) { res.status(500).json({ success: false, message: error.message }); }
+});
+
+app.post('/api/admin/approve-student', protect, isAdmin, async (req, res) => {
+  try { await User.findByIdAndUpdate(req.body.studentId, { status: 'approved' }); res.json({ success: true, message: 'تم تفعيل حساب الطالب!' }); }
+  catch (error) { res.status(500).json({ success: false, message: error.message }); }
+});
+
+app.delete('/api/admin/students/:id', protect, isAdmin, async (req, res) => {
+  try { await User.findByIdAndDelete(req.params.id); res.json({ success: true, message: 'تم إزالة العضو!' }); }
+  catch (error) { res.status(500).json({ success: false, message: error.message }); }
+});
+
+app.get('/api/admin/results', protect, isAdmin, async (req, res) => {
   try {
-    await connectDB();
-    const students = await User.find({ status: 'approved', role: 'student' }).select('-password').sort({ createdAt: -1 });
-    res.json(students.map(publicUser));
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
+    const results = await Result.find().populate('student', 'name username').populate('exam', 'title').sort({ createdAt: -1 }).limit(100);
+    res.json({ success: true, count: results.length, data: results });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 });
 
-app.post('/api/admin/approve-student/:id', auth, adminOnly, async (req, res) => {
-  try {
-    await connectDB();
-    if (!validObjectId(req.params.id)) return res.status(400).json({ message: 'معرف خاطئ' });
-    await User.findByIdAndUpdate(req.params.id, { status: 'approved' });
-    res.json({ message: 'تم القبول' });
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
-});
+app.get('/api/health', (req, res) => res.json({ success: true, message: 'السيرفر يعمل ✅' }));
 
-app.delete('/api/admin/students/:id', auth, adminOnly, async (req, res) => {
-  try {
-    await connectDB();
-    if (!validObjectId(req.params.id)) return res.status(400).json({ message: 'معرف خاطئ' });
-    await User.findByIdAndDelete(req.params.id);
-    res.json({ message: 'تم الحذف' });
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
-});
-
-// ============ النتائج والإحصائيات ============
-
-app.get('/api/admin/results', auth, adminOnly, async (req, res) => {
-  try {
-    await connectDB();
-    const results = await Result.find().sort({ createdAt: -1 }).limit(500);
-    res.json(results);
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
-});
-
-app.get('/api/student/results', auth, async (req, res) => {
-  try {
-    await connectDB();
-    const results = await Result.find({ student: req.user.id }).sort({ createdAt: -1 });
-    res.json(results);
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
-});
-
-app.get('/api/admin/stats', auth, adminOnly, async (req, res) => {
-  try {
-    await connectDB();
-    const [approvedStudentsCount, pendingStudentsCount, lessonsCount, examsCount] = await Promise.all([
-      User.countDocuments({ status: 'approved', role: 'student' }),
-      User.countDocuments({ status: 'pending', role: 'student' }),
-      Lesson.countDocuments(),
-      Exam.countDocuments()
-    ]);
-    res.json({ approvedStudentsCount, pendingStudentsCount, lessonsCount, examsCount });
-  } catch {
-    res.status(500).json({ message: 'خطأ' });
-  }
-});
-
-// ============ مساعدات ============
-
-async function uploadPdf(file) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return '';
-  try {
-    const name = `lessons/${Date.now()}-${crypto.randomUUID()}.pdf`;
-    const blob = await put(name, file.buffer, { access: 'public', contentType: 'application/pdf' });
-    return blob.url;
-  } catch {
-    return '';
-  }
-}
-
-// ============ معالج 404 للـ SPA ============
-// أي مسار لا يبدأ بـ /api يُرجع index.html
-app.use((req, res) => {
-  if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, 'index.html'));
-  } else {
-    res.status(404).json({ message: 'Not found' });
-  }
-});
-
-// ============ التشغيل ============
-
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 متاح على http://localhost:${PORT}`));
+// ===================== Start Server ======================
+if (!isVercel) {
+  mongoose.connect(MONGO_URI)
+    .then(async () => {
+      console.log('✅ تم الاتصال بقاعدة البيانات بنجاح');
+      await initAdmin();
+      app.listen(PORT, () => console.log(`🚀 السيرفر يعمل على المنفذ ${PORT}`));
+    })
+    .catch(err => {
+      console.error('❌ خطأ في الاتصال:', err.message);
+    });
+} else {
+  // Vercel serverless - connect on first request
+  let connected = false;
+  const connectDB = async () => {
+    if (connected) return;
+    await mongoose.connect(MONGO_URI);
+    connected = true;
+    console.log('✅ متصل بقاعدة البيانات');
+    await initAdmin();
+  };
+  app.use(async (req, res, next) => {
+    try { await connectDB(); next(); }
+    catch (err) { res.status(500).json({ success: false, message: 'خطأ في الاتصال بقاعدة البيانات' }); }
+  });
 }
 
 module.exports = app;
