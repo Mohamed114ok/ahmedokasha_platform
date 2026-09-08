@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>منصة أ/ أحمد عكاشة - اللغة العربية</title>
+
+  <link rel="icon" href="/favicon.ico">
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <style>
+    :root {
+      --primary: #059669;
+      --danger: #ef4444;
+      --success: #10b981;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+    }
+
+    * {
+      box-sizing: border-box;
+      font-family: 'Cairo', sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #f3f4f6;
+      color: var(--text);
+      padding-bottom: 50px;
+    }
+
+    header {
+      background: linear-gradient(135deg, #065f46, #047857);
+      color: white;
+      padding: 30px 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      margin-bottom: 5px;
+    }
+
+    nav {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin: 20px 0;
+      flex-wrap: wrap;
+      padding: 0 15px;
+    }
+
+    nav button {
+      background: white;
+      border: 1px solid #cbd5e1;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    nav button:hover,
+    nav button.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 15px;
+    }
+
+    .card {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.95rem;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(5,150,105,0.1);
+    }
+
+    .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      width: 100%;
+      transition: all 0.3s;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: #047857;
+    }
+
+    .btn-danger {
+      background: var(--danger) !important;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: #dc2626 !important;
+    }
+
+    .btn-secondary {
+      background: #64748b;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #475569;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .alert {
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      font-weight: bold;
+      animation: slideIn 0.3s ease-in-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateY(-20px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .alert-success {
+      background: #d1fae5;
+      color: #065f46;
+      border-right: 4px solid var(--success);
+    }
+
+    .alert-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border-right: 4px solid var(--danger);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      min-width: 600px;
+    }
+
+    .table th,
+    .table td {
+      border: 1px solid var(--border);
+      padding: 10px;
+      text-align: right;
+    }
+
+    .table th {
+      background: #f9fafb;
+      font-weight: 600;
+    }
+
+    .lesson-card {
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+
+    .lesson-card h3 {
+      margin-bottom: 8px;
+    }
+
+    .lesson-card p {
+      white-space: pre-wrap;
+      line-height: 1.8;
+      margin-bottom: 10px;
+    }
+
+    .lesson-link {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+      margin-left: 10px;
+    }
+
+    .lesson-link:hover {
+      text-decoration: underline;
+    }
+
+    .exam-card {
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .exam-card:hover {
+      background: #ecfdf5;
+      transform: translateY(-1px);
+    }
+
+    .exam-card:focus {
+      outline: 3px solid rgba(5,150,105,0.2);
+      border-color: var(--primary);
+    }
+
+    .user-info {
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      color: #065f46;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .result-score {
+      color: var(--primary);
+      font-size: 1.6rem;
+      margin-top: 15px;
+      text-align: center;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, var(--primary), #047857);
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .question-card {
+      background: #f9fafb;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+
+    .question-option {
+      display: block;
+      padding: 8px;
+      margin-top: 8px;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    .question-option:hover {
+      background: #ecfdf5;
+    }
+
+    .admin-question {
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+
+    .admin-question .q-text {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .admin-option-row {
+      display: flex;
+      gap: 10px;
+      margin: 8px 0;
+      align-items: center;
+    }
+
+    .admin-option-row input[type="text"] {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .exam-submit {
+      margin-top: 10px;
+    }
+
+    .result-container {
+      text-align: center;
+    }
+
+    .result-percentage {
+      font-size: 2rem;
+      color: var(--primary);
+      margin: 20px 0;
+      font-weight: 700;
+    }
+
+    .result-message {
+      font-size: 1.2rem;
+    }
+
+    .result-message.passed {
+      color: var(--success);
+    }
+
+    .result-message.failed {
+      color: var(--danger);
+    }
+
+    .back-exams-btn {
+      margin-top: 20px;
+    }
+
+    .action-btn {
+      padding: 4px 8px;
+      width: auto;
+      font-size: 0.8rem;
+    }
+
+    .section-heading {
+      margin-top: 30px;
+    }
+
+    @media (max-width: 600px) {
+      header h1 {
+        font-size: 1.5rem;
+      }
+
+      nav button {
+        padding: 8px 10px;
+        font-size: 0.85rem;
+      }
+
+      .card {
+        padding: 18px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <h1>📚 منصة أ/ أحمد عكاشة</h1>
+    <p>شرح - اختبارات تفاعلية - مراجعات شاملة</p>
+  </header>
+
+  <nav>
+    <button type="button" id="tab-register" class="active">
+      طلب انضمام
+    </button>
+
+    <button type="button" id="tab-login">
+      تسجيل الدخول
+    </button>
+
+    <button type="button" id="tab-lessons" class="hidden">
+      📖 الدروس
+    </button>
+
+    <button type="button" id="tab-exams" class="hidden">
+      📝 الامتحانات
+    </button>
+
+    <button type="button" id="tab-admin" class="hidden">
+      👑 لوحة المعلم
+    </button>
+
+    <button
+      type="button"
+      id="tab-logout"
+      class="hidden"
+      style="background:#ef4444; color:white;"
+    >
+      🚪 خروج
+    </button>
+  </nav>
+
+  <div class="container">
+
+    <div id="alertBox" class="alert hidden"></div>
+
+    <div id="userInfo" class="user-info hidden"></div>
+
+    <!-- تسجيل طالب -->
+    <div id="section-register" class="card">
+
+      <h2>📋 تسجيل طالب جديد</h2>
+
+      <form id="registerForm">
+
+        <div class="form-group">
+          <label for="regName">الاسم الكامل</label>
+          <input type="text" id="regName" required>
+        </div>
+
+        <div class="form-group">
+          <label for="regPhone">رقم الهاتف</label>
+          <input type="tel" id="regPhone" required>
+        </div>
+
+        <div class="form-group">
+          <label for="regParentPhone">رقم هاتف ولي الأمر</label>
+          <input type="tel" id="regParentPhone">
+        </div>
+
+        <div class="form-group">
+          <label for="regStage">المرحلة</label>
+
+          <select id="regStage" required>
+            <option value="">اختر المرحلة</option>
+            <option value="ابتدائي">ابتدائي</option>
+            <option value="إعدادي">إعدادي</option>
+            <option value="ثانوي">ثانوي</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="regGrade">الصف</label>
+
+          <select id="regGrade" required>
+            <option value="">اختر الصف</option>
+            <option value="أول">أول</option>
+            <option value="ثاني">ثاني</option>
+            <option value="ثالث">ثالث</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="regUsername">اسم المستخدم</label>
+          <input type="text" id="regUsername" required>
+        </div>
+
+        <div class="form-group">
+          <label for="regPassword">كلمة المرور</label>
+          <input
+            type="password"
+            id="regPassword"
+            required
+            minlength="8"
+          >
+        </div>
+
+        <button type="submit" class="btn">
+          ✅ إرسال الطلب
+        </button>
+
+      </form>
+    </div>
+
+    <!-- تسجيل الدخول -->
+    <div id="section-login" class="card hidden">
+
+      <h2>🔐 تسجيل الدخول</h2>
+
+      <form id="loginForm">
+
+        <div class="form-group">
+          <label for="loginUsername">اسم المستخدم</label>
+          <input type="text" id="loginUsername" required>
+        </div>
+
+        <div class="form-group">
+          <label for="loginPassword">كلمة المرور</label>
+          <input type="password" id="loginPassword" required>
+        </div>
+
+        <button type="submit" class="btn">
+          🔑 دخول
+        </button>
+
+      </form>
+    </div>
+
+    <!-- الدروس -->
+    <div id="section-lessons" class="card hidden">
+
+      <h2>📖 الدروس</h2>
+
+      <div id="lessonsList"></div>
+
+    </div>
+
+    <!-- الامتحانات -->
+    <div id="section-exams" class="card hidden">
+
+      <h2>📝 الامتحانات</h2>
+
+      <div id="examsList"></div>
+
+    </div>
+
+    <!-- لوحة المعلم -->
+    <div id="section-admin" class="card hidden">
+
+      <h2>👑 لوحة التحكم</h2>
+
+      <div style="margin-bottom: 30px;">
+
+        <h3>📊 الإحصائيات</h3>
+
+        <div
+          class="stats-grid"
+          id="statsGrid"
+        ></div>
+
+      </div>
+
+      <!-- إضافة درس -->
+      <h3>➕ إضافة درس جديد</h3>
+
+      <form id="addLessonForm">
+
+        <div class="form-group">
+          <label for="lessonTitle">عنوان الدرس</label>
+          <input type="text" id="lessonTitle" required>
+        </div>
+
+        <div class="form-group">
+          <label for="lessonStage">المرحلة</label>
+          <input type="text" id="lessonStage">
+        </div>
+
+        <div class="form-group">
+          <label for="lessonGrade">الصف</label>
+          <input type="text" id="lessonGrade">
+        </div>
+
+        <div class="form-group">
+          <label for="lessonContent">المحتوى</label>
+          <textarea id="lessonContent" rows="4"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="lessonVideo">
+            رابط الفيديو (YouTube)
+          </label>
+
+          <input
+            type="url"
+            id="lessonVideo"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="lessonDrive">
+            رابط Google Drive
+          </label>
+
+          <input
+            type="url"
+            id="lessonDrive"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="lessonPdfFile">
+            ملف PDF
+          </label>
+
+          <input
+            type="file"
+            id="lessonPdfFile"
+            accept=".pdf,application/pdf"
+          >
+        </div>
+
+        <button type="submit" class="btn">
+          📤 نشر الدرس
+        </button>
+
+      </form>
+
+      <!-- إضافة امتحان -->
+      <h3 class="section-heading">
+        ➕ إضافة امتحان
+      </h3>
+
+      <form id="addExamForm">
+
+        <div class="form-group">
+          <label for="examTitle">
+            عنوان الامتحان
+          </label>
+
+          <input
+            type="text"
+            id="examTitle"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="examStage">
+            المرحلة
+          </label>
+
+          <input
+            type="text"
+            id="examStage"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="examGrade">
+            الصف
+          </label>
+
+          <input
+            type="text"
+            id="examGrade"
+          >
+        </div>
+
+        <div id="questionsContainer"></div>
+
+        <button
+          type="button"
+          id="addQuestionBtn"
+          class="btn btn-secondary"
+        >
+          ➕ إضافة سؤال
+        </button>
+
+        <button
+          type="submit"
+          class="btn"
+          style="margin-top:10px;"
+        >
+          ✅ إنشاء الامتحان
+        </button>
+
+      </form>
+
+      <!-- الطلاب المعلقون -->
+      <h3 class="section-heading">
+        📋 الطلاب المعلقون
+      </h3>
+
+      <div
+        class="table-wrapper"
+        style="overflow-x:auto;"
+      >
+
+        <table class="table">
+
+          <thead>
+            <tr>
+              <th>الاسم</th>
+              <th>الصف</th>
+              <th>الهاتف</th>
+              <th>الإجراء</th>
+            </tr>
+          </thead>
+
+          <tbody id="pendingStudentsTable"></tbody>
+
+        </table>
+
+      </div>
+
+      <!-- الطلاب المقبولون -->
+      <h3 class="section-heading">
+        ✅ الطلاب المقبولون
+      </h3>
+
+      <div
+        class="table-wrapper"
+        style="overflow-x:auto;"
+      >
+
+        <table class="table">
+
+          <thead>
+            <tr>
+              <th>الاسم</th>
+              <th>الصف</th>
+              <th>الهاتف</th>
+              <th>الإجراء</th>
+            </tr>
+          </thead>
+
+          <tbody id="approvedStudentsTable"></tbody>
+
+        </table>
+
+      </div>
+
+      <!-- النتائج -->
+      <h3 class="section-heading">
+        📊 نتائج الامتحانات
+      </h3>
+
+      <div
+        class="table-wrapper"
+        style="overflow-x:auto;"
+      >
+
+        <table class="table">
+
+          <thead>
+            <tr>
+              <th>الطالب</th>
+              <th>الامتحان</th>
+              <th>الدرجة</th>
+              <th>التاريخ</th>
+            </tr>
+          </thead>
+
+          <tbody id="resultsTable"></tbody>
+
+        </table>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- JavaScript خارجي حتى يتوافق مع CSP -->
+  <script src="/app.js" defer></script>
+
+</body>
+</html>
