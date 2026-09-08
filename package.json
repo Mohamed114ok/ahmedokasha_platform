@@ -1,5 +1,5 @@
 {
-  "name": "okasha-arabic-platform",
+  "name": "ahmedokasha_platform",
   "version": "1.0.0",
   "private": true,
   "description": "منصة أ/ أحمد عكاشة - تعليم اللغة العربية",
@@ -9,8 +9,17 @@
     "dev": "node server.js"
   },
   "engines": {
-    "node": "24.x"
+    "node": "20.x",
+    "npm": "10.x"
   },
+  "keywords": [
+    "education",
+    "arabic",
+    "platform",
+    "learning"
+  ],
+  "author": "أحمد عكاشة",
+  "license": "MIT",
   "dependencies": {
     "@vercel/blob": "^2.0.0",
     "bcryptjs": "^3.0.2",
