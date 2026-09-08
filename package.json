@@ -1,35 +1,22 @@
 {
-  "name": "ahmedokasha_platform",
+  "name": "arabic-platform",
   "version": "1.0.0",
-  "private": true,
-  "description": "منصة أ/ أحمد عكاشة - تعليم اللغة العربية",
+  "description": "منصة تعليم اللغة العربية - أ/ أحمد عكاشة",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "nodemon server.js"
   },
-  "engines": {
-    "node": "20.x",
-    "npm": "10.x"
-  },
-  "keywords": [
-    "education",
-    "arabic",
-    "platform",
-    "learning"
-  ],
-  "author": "أحمد عكاشة",
-  "license": "MIT",
   "dependencies": {
-    "@vercel/blob": "^2.0.0",
-    "bcryptjs": "^3.0.2",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "dotenv": "^17.4.2",
-    "express": "^5.1.0",
-    "express-rate-limit": "^8.2.1",
-    "helmet": "^8.1.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.18.0",
-    "multer": "^2.0.2"
+    "mongoose": "^8.0.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   }
 }
